@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>과천동 버스 정보 키오스크</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: #0b0f19;
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            padding: 2rem;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid #1e293b;
+            padding-bottom: 1rem;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+            background: linear-gradient(to right, #60a5fa, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #1e293b;
+            padding: 0.5rem 1rem;
+            border-radius: 50px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #94a3b8;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            background-color: #10b981;
+            border-radius: 50%;
+            animation: blink 1.5s infinite;
+        }
+
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            grid-template-rows: repeat(2, 1fr);
+            gap: 2rem;
+            flex: 1;
+        }
+
+        .station-card {
+            background: rgba(30, 41, 59, 0.5);
+            border: 1px solid #334155;
+            border-radius: 24px;
+            padding: 2rem;
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .station-name {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #f8fafc;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .station-name::before {
+            content: '🚌';
+            font-size: 1.6rem;
+        }
+
+        .bus-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+            flex: 1;
+            justify-content: center;
+        }
+
+        .bus-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 1.5rem;
+            background: #0f172a;
+            border-radius: 16px;
+            border-left: 6px solid #3b82f6;
+        }
+
+        .no-bus {
+            text-align: center;
+            color: #64748b;
+            font-size: 1.4rem;
+            padding: 2rem;
+            border: 1px dashed #334155;
+            border-radius: 16px;
+        }
+
+        .bus-number {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #3b82f6;
+        }
+
+        .arrival-time {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: #e2e8f0;
+        }
+
+        .time-highlight {
+            color: #ef4444;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>실시간 대중교통 안내</h1>
+        <div class="live-indicator">
+            <span class="dot"></span>
+            <span id="current-time">오후 --:--</span>
+        </div>
+    </header>
+
+    <div class="grid-container">
+        <div class="station-card" id="station-1">
+            <div class="station-name">양지마을.환경사업소 (21022)</div>
+            <div class="bus-list"><div class="no-bus">로딩 중...</div></div>
+        </div>
+
+        <div class="station-card" id="station-2">
+            <div class="station-name">양지마을.환경사업소 (21021)</div>
+            <div class="bus-list"><div class="no-bus">로딩 중...</div></div>
+        </div>
+
+        <div class="station-card" id="station-3">
+            <div class="station-name">선바위역 (21014)</div>
+            <div class="bus-list"><div class="no-bus">로딩 중...</div></div>
+        </div>
+
+        <div class="station-card" id="station-4">
+            <div class="station-name">선바위역 (21013)</div>
+            <div class="bus-list"><div class="no-bus">로딩 중...</div></div>
+        </div>
+    </div>
+
+    <script>
+        // ★여기에 발급받으신 공공데이터 포털 인증키를 넣으세요★
+        const SERVICE_KEY = '4b81a062ed68767625f282d44956e85e1634cb6a3ce9126bfed0bc7724d3e277'; 
+        
+        const STATIONS = [
+            { id: '21800022', elementId: 'station-1' },
+            { id: '21800021', elementId: 'station-2' },
+            { id: '21800014', elementId: 'station-3' },
+            { id: '21800013', elementId: 'station-4' }
+        ];
+
+        const ROUTE_NAME_CACHE = {};
+
+        // 노선조회 API 실시간 이름 찾기 함수
+        async function getBusRouteName(routeId) {
+            if (ROUTE_NAME_CACHE[routeId]) {
+                return ROUTE_NAME_CACHE[routeId];
+            }
+
+            const url = `http://apis.data.go.kr/6410000/busrouteservice/v2/getBusRouteInfoItemv2?serviceKey=${SERVICE_KEY}&routeId=${routeId}&format=json`;
+            
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.response.body && data.response.body.items && data.response.body.items.item) {
+                    const routeName = data.response.body.items.item.routeName;
+                    ROUTE_NAME_CACHE[routeId] = routeName;
+                    return routeName;
+                }
+            } catch (error) {
+                console.error(`노선 정보 조회 실패 (${routeId}):`, error);
+            }
+            
+            return `노선:${routeId}`;
+        }
+
+        // 버스 도착정보 호출 함수
+        async function fetchBusArrival(stationId, elementId) {
+            const url = `http://apis.data.go.kr/6410000/busarrivalservice/v2/getBusArrivalListv2?serviceKey=${SERVICE_KEY}&stationId=${stationId}&format=json`;
+            const listContainer = document.querySelector(`#${elementId} .bus-list`);
+            
+            if (!listContainer) return; // 예외 처리 방어 코드
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                listContainer.innerHTML = '';
+
+                if (!data.response.body || !data.response.body.items) {
+                    listContainer.innerHTML = '<div class="no-bus">도착 예정 버스 없음</div>';
+                    return;
+                }
+
+                let items = data.response.body.items.item;
+                if (!Array.isArray(items)) items = [items];
+
+                const topBuses = items.slice(0, 2);
+                
+                const htmlPromises = topBuses.map(async (bus) => {
+                    const rawRouteId = bus.routeId;
+                    const busNum = await getBusRouteName(rawRouteId); 
+                    const timeLeft = bus.predictTime1; 
+                    
+                    let timeText = `${timeLeft}분 전`;
+                    let highlightClass = '';
+                    
+                    if (timeLeft <= 2) {
+                        timeText = '잠시 후 도착';
+                        highlightClass = 'time-highlight';
+                    }
+
+                    return `
+                        <div class="bus-item">
+                            <span class="bus-number">${busNum}</span>
+                            <span class="arrival-time ${highlightClass}">${timeText}</span>
+                        </div>
+                    `;
+                });
+
+                const htmlResults = await Promise.all(htmlPromises);
+                listContainer.innerHTML = htmlResults.join('');
+
+            } catch (error) {
+                console.error(`${stationId} 데이터 실패:`, error);
+                listContainer.innerHTML = '<div class="no-bus" style="color:#ef4444;">데이터 연결 오류</div>';
+            }
+        }
+
+        function updateAllStations() {
+            STATIONS.forEach(station => {
+                fetchBusArrival(station.id, station.elementId);
+            });
+        }
